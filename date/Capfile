@@ -7,13 +7,14 @@
     set :g5k_user, "msimonin"
     set :gateway, "#{g5k_user}@access.grid5000.fr"
     ssh_options[:keys]= [File.join(ENV["HOME"], ".ssh_cap", "id_rsa_cap")]
+    set :ssh_public,  File.join(ENV["HOME"], ".ssh_cap", "id_rsa_cap.pub")
     
     
     @myxp = XP5K::XPM.new()
     
     @myxp.define_job({
       :resources  => ["nodes=1,walltime=1", "nodes=2,walltime=1"],
-      :sites      => %w( toulouse lyon) ,
+      :sites      => %w( nancy lyon) ,
       :types      => ["deploy"],
       :name       => "job1",
       :command    => "sleep 3600"
@@ -21,7 +22,7 @@
     
     @myxp.define_job({
       :resources  => ["nodes=1,walltime=1"],
-      :sites      => %w(toulouse lille reims),
+      :sites      => %w(nancy reims),
       :types      => ["deploy"],
       :name       => "job2",
       :command    => "sleep 3600"
@@ -32,7 +33,7 @@
       :site           => XP5K::Config[:site] || 'rennes',
       :environment    => "squeeze-x64-nfs",
       :jobs           => %w{ job1 job2 },
-      :key            => File.read(XP5K::Config[:public_key])
+      :key            => File.read("#{ssh_public}")
     })
     
     role :job1 do
