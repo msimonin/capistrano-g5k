@@ -1,137 +1,137 @@
-require 'bundler/setup'
-require 'rubygems'
-require 'xp5k'
-require 'erb'
-require 'pp'
+    require 'bundler/setup'
+    require 'rubygems'
+    require 'xp5k'
+    require 'erb'
+    require 'pp'
 
-load 'config/deploy.rb' 
-
-
-XP5K::Config.load
-
-myxp = XP5K::XPM.new(:logger => logger)
-
-myxp.define_job({
-  :resources  => ["nodes=1, walltime=2"],
-  :sites      => %w( nancy ),
-  :types      => ["deploy"],
-  :name       => "dfs_master",
-  :command    => "sleep 86400"
-})
-
-myxp.define_job({
-  :resources  => ["nodes=2, walltime=2"],
-  :sites      => %w( nancy luxembourg lyon),
-  :types      => ["deploy"],
-  :name       => "dfs_slave",
-  :command    => "sleep 86400"
-})
-
-myxp.define_job({
-    :resources  => ["{type='kavlan-global'}vlan=1, walltime=#{walltime}"],
-    :sites       => %w( nancy ),
-    :name       => "vlan",
-    :command    => "sleep 86400"
-})
+    load 'config/deploy.rb' 
 
 
-myxp.define_deployment({
-  :environment    => "squeeze-x64-nfs",
-  :jobs           => %w{ dfs_slave dfs_master },
-  :key            => File.read("#{ssh_public}"),
-  :vlan           => "#{vlan}" 
-})
+    XP5K::Config.load
+
+    myxp = XP5K::XPM.new(:logger => logger)
+
+    myxp.define_job({
+      :resources  => ["nodes=1, walltime=2"],
+      :sites      => %w( nancy ),
+      :types      => ["deploy"],
+      :name       => "dfs_master",
+      :command    => "sleep 86400"
+    })
+
+    myxp.define_job({
+      :resources  => ["nodes=2, walltime=2"],
+      :sites      => %w( nancy luxembourg lyon),
+      :types      => ["deploy"],
+      :name       => "dfs_slave",
+      :command    => "sleep 86400"
+    })
+
+    myxp.define_job({
+        :resources  => ["{type='kavlan-global'}vlan=1, walltime=#{walltime}"],
+        :sites       => %w( nancy ),
+        :name       => "vlan",
+        :command    => "sleep 86400"
+    })
 
 
-role :dfs_master do
-  myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}")
-end
-
-role :dfs_slave do
-  myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}")
-end
-
-role :frontend do
-  %w(reims)
-end
+    myxp.define_deployment({
+      :environment    => "squeeze-x64-nfs",
+      :jobs           => %w{ dfs_slave dfs_master },
+      :key            => File.read("#{ssh_public}"),
+      :vlan           => "#{vlan}" 
+    })
 
 
-desc 'Submit jobs'
-task :submit do
-  myxp.submit
-end
-
-desc 'Deploy with Kadeploy'
-task :deploy  do
-  myxp.deploy
-end
-
-
-namespace :glusterfs do
-
-  desc 'Deploy Glusterfs on nodes'
-  task :default do
-    generate
-    transfer
-    deploy
-  end
-
-  desc 'Undeploy Glusterfs on nodes'
-  task :undeploy do
-    unmount
-    undeploy
-  end
-
-  desc 'Generate GlusterFS config file' 
-  task :generate do
-    template = File.read("templates/glusterfs.erb")
-    renderer = ERB.new(template)
-    @master = myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}").first
-    @master = "root@" + @master
-    @datanodes = myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}").clone
-    @datanodes.map!{|item| "root@"+item+":/tmp"}
-    @clientnodes = myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}").clone
-    @clientnodes.map!{|item| "root@"+item }
-    generate = renderer.result(binding)
-    myFile = File.open("tmp/glusterfs", "w")
-    myFile.write(generate)
-    myFile.close
-  end
-
-  desc 'Transfer the config file'
-  task :transfer, :roles => [:frontend] do
-    set :user, "#{g5k_user}"
-    upload("tmp/glusterfs","/home/#{g5k_user}/glusterfs")  
-  end
-
-  desc 'Deploy Glusterfs'
-  task :deploy, :roles => [:frontend] do
-    set :user, "#{g5k_user}"
-    run "dfs5k -a deploy -s glusterfs -f /home/#{g5k_user}/glusterfs"
-  end
-
-  desc 'Mount Glusterfs'
-  task :mount, :roles => [:frontend] do
-    set :user, "#{g5k_user}"
-    run "dfs5k -a mount -s glusterfs -f /home/#{g5k_user}/glusterfs"
-  end
-  
-  desc 'Undeploy Glusterfs'
-  task :undeploy, :roles => [:frontend] do
-    set :user, "#{g5k_user}"
-    run "dfs5k -a undeploy -s glusterfs -f /home/#{g5k_user}/glusterfs"
-  end
-
-  desc 'Unmount Glusterfs'
-  task :unmount, :roles => [:frontend] do
-    set :user, "#{g5k_user}"
-    run "dfs5k -a unmount -s glusterfs -f /home/#{g5k_user}/glusterfs"
-  end
-
-end
-desc 'Remove all running jobs'
-task :clean do
-  logger.debug "Clean all Grid'5000 running jobs..."
-    myxp.clean
+    role :dfs_master do
+      myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}")
     end
+
+    role :dfs_slave do
+      myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}")
+    end
+
+    role :frontend do
+      %w(reims)
+    end
+
+
+    desc 'Submit jobs'
+    task :submit do
+      myxp.submit
+    end
+
+    desc 'Deploy with Kadeploy'
+    task :deploy  do
+      myxp.deploy
+    end
+
+
+    namespace :glusterfs do
+
+      desc 'Deploy Glusterfs on nodes'
+      task :default do
+        generate
+        transfer
+        deploy
+      end
+
+      desc 'Undeploy Glusterfs on nodes'
+      task :undeploy do
+        unmount
+        undeploy
+      end
+
+      desc 'Generate GlusterFS config file' 
+      task :generate do
+        template = File.read("templates/glusterfs.erb")
+        renderer = ERB.new(template)
+        @master = myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}").first
+        @master = "root@" + @master
+        @datanodes = myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}").clone
+        @datanodes.map!{|item| "root@"+item+":/tmp"}
+        @clientnodes = myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}").clone
+        @clientnodes.map!{|item| "root@"+item }
+        generate = renderer.result(binding)
+        myFile = File.open("tmp/glusterfs", "w")
+        myFile.write(generate)
+        myFile.close
+      end
+
+      desc 'Transfer the config file'
+      task :transfer, :roles => [:frontend] do
+        set :user, "#{g5k_user}"
+        upload("tmp/glusterfs","/home/#{g5k_user}/glusterfs")  
+      end
+
+      desc 'Deploy Glusterfs'
+      task :deploy, :roles => [:frontend] do
+        set :user, "#{g5k_user}"
+        run "dfs5k -a deploy -s glusterfs -f /home/#{g5k_user}/glusterfs"
+      end
+
+      desc 'Mount Glusterfs'
+      task :mount, :roles => [:frontend] do
+        set :user, "#{g5k_user}"
+        run "dfs5k -a mount -s glusterfs -f /home/#{g5k_user}/glusterfs"
+      end
+      
+      desc 'Undeploy Glusterfs'
+      task :undeploy, :roles => [:frontend] do
+        set :user, "#{g5k_user}"
+        run "dfs5k -a undeploy -s glusterfs -f /home/#{g5k_user}/glusterfs"
+      end
+
+      desc 'Unmount Glusterfs'
+      task :unmount, :roles => [:frontend] do
+        set :user, "#{g5k_user}"
+        run "dfs5k -a unmount -s glusterfs -f /home/#{g5k_user}/glusterfs"
+      end
+
+    end
+    desc 'Remove all running jobs'
+    task :clean do
+      logger.debug "Clean all Grid'5000 running jobs..."
+        myxp.clean
+        end
 
