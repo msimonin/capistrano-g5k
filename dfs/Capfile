@@ -1,7 +1,9 @@
+require 'bundler/setup'
 require 'rubygems'
 require 'xp5k'
 require 'erb'
 require 'pp'
+
 load 'config/deploy.rb' 
 
 
@@ -19,7 +21,7 @@ myxp.define_job({
 
 myxp.define_job({
   :resources  => ["nodes=2, walltime=2"],
-  :sites      => %w( nancy luxembourg ),
+  :sites      => %w( nancy luxembourg lyon),
   :types      => ["deploy"],
   :name       => "dfs_slave",
   :command    => "sleep 86400"
@@ -34,7 +36,6 @@ myxp.define_job({
 
 
 myxp.define_deployment({
-  :site           => XP5K::Config[:site] || 'rennes',
   :environment    => "squeeze-x64-nfs",
   :jobs           => %w{ dfs_slave dfs_master },
   :key            => File.read("#{ssh_public}"),
@@ -43,11 +44,11 @@ myxp.define_deployment({
 
 
 role :dfs_master do
-  myxp.get_assigned_nodes('dfs_master', kavlan="#{vlan}")
+  myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}")
 end
 
 role :dfs_slave do
-  myxp.get_assigned_nodes('dfs_slave', kavlan="#{vlan}")
+  myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}")
 end
 
 role :frontend do
@@ -73,7 +74,6 @@ namespace :glusterfs do
     generate
     transfer
     deploy
-    mount
   end
 
   desc 'Undeploy Glusterfs on nodes'
@@ -86,11 +86,11 @@ namespace :glusterfs do
   task :generate do
     template = File.read("templates/glusterfs.erb")
     renderer = ERB.new(template)
-    @master = myxp.get_assigned_nodes('dfs_master', kavlan="#{vlan}").first
+    @master = myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}").first
     @master = "root@" + @master
-    @datanodes = myxp.get_assigned_nodes('dfs_slave', kavlan="#{vlan}").clone
+    @datanodes = myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}").clone
     @datanodes.map!{|item| "root@"+item+":/tmp"}
-    @clientnodes = myxp.get_assigned_nodes('dfs_slave', kavlan="#{vlan}").clone
+    @clientnodes = myxp.get_deployed_nodes('dfs_slave', kavlan="#{vlan}").clone
     @clientnodes.map!{|item| "root@"+item }
     generate = renderer.result(binding)
     myFile = File.open("tmp/glusterfs", "w")
