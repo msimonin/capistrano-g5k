@@ -1,0 +1,96 @@
+require 'bundler/setup'
+require 'rubygems'
+require 'xp5k'
+require 'erb'
+require 'pp'
+
+load 'config/deploy.rb' 
+
+
+XP5K::Config.load
+
+myxp = XP5K::XPM.new(:logger => logger)
+
+myxp.define_job({
+  :resources  => ["nodes=6, walltime=2"],
+  :sites      => %w( nancy ),
+  :types      => ["deploy"],
+  :name       => "cassandra",
+  :command    => "sleep 86400"
+})
+
+myxp.define_job({
+    :resources  => ["{type='kavlan-global'}vlan=1, walltime=#{walltime}"],
+    :sites       => %w( nancy ),
+    :command    => "sleep 86400"
+})
+
+
+myxp.define_deployment({
+  :environment    => "squeeze-x64-nfs",
+  :jobs           => %w{ dfs_master },
+  :key            => File.read("#{ssh_public}"),
+  :vlan           => "#{vlan}" 
+})
+
+
+role :dfs_master do
+  myxp.get_deployed_nodes('dfs_master', kavlan="#{vlan}")
+end
+
+role :frontend do
+  %w(reims)
+end
+
+
+desc 'Submit jobs'
+task :submit do
+  myxp.submit
+end
+
+desc 'Deploy with Kadeploy'
+task :deploy  do
+  myxp.deploy
+end
+
+
+namespace :cassandra do
+
+  desc 'Deploy Glusterfs on nodes'
+  task :default do
+    generate
+    transfer
+    deploy
+  end
+
+  desc 'Undeploy Glusterfs on nodes'
+  task :undeploy do
+    unmount
+    undeploy
+  end
+
+  desc 'Generate GlusterFS config file' 
+  task :generate do
+    template = File.read("templates/glusterfs.erb")
+    renderer = ERB.new(template)
+    @cassandra_name = 'cassandra'
+    @cassandra_name = myxp.get_deployed_nodes('dfs_seeds', kavlan="#{vlan}").clone
+    generate = renderer.result(binding)
+    myFile = File.open("tmp/casssandra.pp", "w")
+    myFile.write(generate)
+    myFile.close
+  end
+
+  desc 'Transfer the config file'
+  task :transfer, :roles => [:frontend] do
+    set :user, "#{g5k_user}"
+    upload("tmp/cassandra","/home/#{g5k_user}/")  
+  end
+
+end
+desc 'Remove all running jobs'
+task :clean do
+  logger.debug "Clean all Grid'5000 running jobs..."
+    myxp.clean
+    end
+
